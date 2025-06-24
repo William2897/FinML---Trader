@@ -61,9 +61,7 @@ def train_model_for_ticker(ticker):
     
     try:
         # FIXED: Use the raw connection from the engine for pandas compatibility
-        with engine.connect() as connection:
-            df = pd.read_sql(f"SELECT * FROM {table_name}", connection.connection)
-        
+        df = pd.read_sql(f"SELECT * FROM {table_name}", engine)
         df = feature_engineering(df.copy())
         df = create_target_variable(df.copy())
         
