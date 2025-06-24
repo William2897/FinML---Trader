@@ -1,0 +1,29 @@
+services:
+  # service will run data ingestion script
+  ingestion_script:
+    build: .  # Tells Docker to build using the Dockerfile in this directory
+    depends_on:
+      - postgres # Ensures the database is started before this script runs
+    environment:
+      # Pass credentials to the container. It will connect to the 'postgres' service.
+      - DB_HOST=postgres
+      - DB_NAME=finml_data
+      - DB_USER=user
+      - DB_PASSWORD=password # Make sure this matches the postgres service below
+      - DB_PORT=5432
+
+  # This is our PostgreSQL database service
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=finml_data
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password # Make sure this matches the script's password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # We still expose the port so you can connect with DBeaver from your host machine
+      - "5432:5432"
+
+volumes:
+  postgres_data:
