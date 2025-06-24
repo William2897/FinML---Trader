@@ -6,7 +6,7 @@ import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from tqdm import tqdm
-import traceback # <--- 1. IMPORT THIS MODULE
+import traceback
 
 # --- Database Connection (Same as ingestion script) ---
 DB_USER = os.getenv('DB_USER', 'user')
@@ -19,7 +19,6 @@ engine = create_engine(db_url)
 
 TICKERS = ['aapl', 'googl', 'msft', 'tsla'] # Use lowercase tickers as per our table names
 
-# ... (feature_engineering and create_target_variable functions remain the same) ...
 def feature_engineering(df):
     """Creates an EXTENDED set of time-series features from the price data."""
     df['date'] = pd.to_datetime(df['date'])
@@ -60,10 +59,11 @@ def train_model_for_ticker(ticker):
     
     table_name = f"price_data_{ticker}"
     
-    # --- 2. MODIFY THE 'except' BLOCK AT THE END OF THIS FUNCTION ---
     try:
+        # FIXED: Use the raw connection from the engine for pandas compatibility
         with engine.connect() as connection:
-            df = pd.read_sql(f"SELECT * FROM {table_name}", connection)
+            df = pd.read_sql(f"SELECT * FROM {table_name}", connection.connection)
+        
         df = feature_engineering(df.copy())
         df = create_target_variable(df.copy())
         
@@ -120,7 +120,6 @@ def train_model_for_ticker(ticker):
 
     except Exception as e:
         print(f"An error occurred while processing {ticker}: {e}")
-        # THIS IS THE MODIFIED PART:
         print("--- FULL TRACEBACK ---")
         traceback.print_exc()
         print("----------------------")
