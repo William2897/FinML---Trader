@@ -29,6 +29,8 @@ def clean_column_name(col):
         return col.strip().lower().replace(' ', '_')
 
 
+# In scripts/data_ingestion.py
+
 def fetch_and_store_price_data():
     print("Starting data ingestion process from within Docker...")
 
@@ -47,10 +49,15 @@ def fetch_and_store_price_data():
                 print(f"No data found for {ticker}. Skipping.")
                 continue
 
-            data.columns = [clean_column_name(col) for col in data.columns]
-            data['ticker'] = ticker
+            # ### THE FIX IS HERE ###
+            # 1. Reset the index to make 'Date' a column.
             data.reset_index(inplace=True)
-            data.rename(columns={'date': 'date'}, inplace=True)
+            
+            # 2. Now clean ALL column names, including the new 'Date' column.
+            data.columns = [clean_column_name(col) for col in data.columns]
+            
+            # 3. Add the ticker column.
+            data['ticker'] = ticker
 
             table_name = f"price_data_{ticker.lower()}"
             data.to_sql(table_name, engine, if_exists='replace', index=False)

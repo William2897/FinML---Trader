@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Docker
+# Don't commit local data volumes
+postgres_data/
+
+# IDE / Editor specific
+.idea/
+.vscode/
+
+# Secrets file
+.env

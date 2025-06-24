@@ -1,0 +1,16 @@
+# Ignore Docker and Git specific files
+.dockerignore
+.git
+.gitignore
+docker-compose.yml
+
+# Ignore Python virtual environment (if any)
+venv/
+__pycache__/
+*.pyc
+
+# Ignore node modules (if you add a frontend later)
+node_modules/
+
+# Ignore local data files that shouldn't be in the image
+data/
