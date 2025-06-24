@@ -9,7 +9,7 @@ venv/
 __pycache__/
 *.pyc
 
-# Ignore node modules (if you add a frontend later)
+# Ignore node modules (for frontend)
 node_modules/
 
 # Ignore local data files that shouldn't be in the image

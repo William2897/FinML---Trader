@@ -1,54 +1,60 @@
+# This defines common settings for all airflow services
+x-airflow-common: &airflow-common
+  build: .
+  depends_on:
+    postgres:
+      condition: service_healthy
+  environment:
+    - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+    # Environment variables for our custom scripts
+    - DB_HOST=postgres
+    - DB_NAME=finml_data
+    - DB_USER=user
+    - DB_PASSWORD=password
+    # Point to the mlflow server running on the network
+    - MLFLOW_TRACKING_URI=http://mlflow_ui:5000
+  volumes:
+    # no longer mount dags/scripts directly, they are copied in the Dockerfile.
+    # only need to mount the mlruns volume.
+    - mlflow_data:/opt/airflow/mlruns
+
 services:
-  ingestion_script:
-    build: .
-    command: python scripts/data_ingestion.py
-    depends_on:
-      - postgres
-    environment:
-      - DB_HOST=postgres
-      - DB_NAME=finml_data
-      - DB_USER=user
-      - DB_PASSWORD=password
-      - DB_PORT=5432
-
-  model_trainer:
-    build: .
-    command: python scripts/train_baseline_model.py
-    depends_on:
-      - postgres
-    volumes:
-      # Mount the shared volume so this container can write to it
-      - mlflow_data:/app/mlruns
-    environment:
-      - DB_HOST=postgres
-      - DB_NAME=finml_data
-      - DB_USER=user
-      - DB_PASSWORD=password
-      - DB_PORT=5432
-      # NEW: Tell the script where to log MLflow runs
-      - MLFLOW_TRACKING_URI=/app/mlruns
-
-  # NEW SERVICE for the MLflow Web UI
-  mlflow_ui:
-    build: .
-    command: mlflow ui --host 0.0.0.0 --port 5000 --backend-store-uri /mlruns
-    ports:
-      - "5000:5000" # Expose the UI on port 5000
-    volumes:
-      # Mount the shared volume so the UI can read the experiments
-      - mlflow_data:/mlruns
-
   postgres:
     image: postgres:13
+    container_name: finml_postgres
     environment:
-      - POSTGRES_DB=finml_data
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - POSTGRES_DB=airflow # Airflow's metadata DB
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mlflow_ui:
+    build: .
+    container_name: finml_mlflow_ui
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri /opt/airflow/mlruns --default-artifact-root /opt/airflow/mlruns
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_data:/opt/airflow/mlruns
+
+  # Single Airflow standalone service - runs everything in one container
+  airflow-standalone:
+    <<: *airflow-common
+    container_name: finml_airflow_standalone
+    command: airflow standalone
+    ports:
+      - "8080:8080"
 
 volumes:
   postgres_data:
-  mlflow_data: # Define the new shared volume
+  mlflow_data:
