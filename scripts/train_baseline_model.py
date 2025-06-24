@@ -19,19 +19,24 @@ engine = create_engine(db_url)
 TICKERS = ['aapl', 'googl', 'msft', 'tsla'] # Use lowercase tickers as per our table names
 
 def feature_engineering(df):
-    """Creates time-series features from the price data."""
+    """Creates an EXTENDED set of time-series features from the price data."""
     df['date'] = pd.to_datetime(df['date'])
     df.set_index('date', inplace=True)
     
-    # Simple Moving Averages
+    # --- NEW: Longer-term Moving Averages ---
     df['ma_5'] = df['close'].rolling(window=5).mean()
+    df['ma_10'] = df['close'].rolling(window=10).mean() # New
     df['ma_20'] = df['close'].rolling(window=20).mean()
+    df['ma_50'] = df['close'].rolling(window=50).mean() # New
+    
+    # --- NEW: Price Rate of Change ---
+    df['roc_10'] = ((df['close'] - df['close'].shift(10)) / df['close'].shift(10)) * 100 # New
     
     # Volatility
     df['volatility'] = df['close'].rolling(window=20).std()
     
-    # Lag features
-    for i in range(1, 6):
+    # --- NEW: More Lag features ---
+    for i in range(1, 11): # Extended from 5 to 10
         df[f'lag_{i}'] = df['close'].shift(i)
         
     df.dropna(inplace=True)
@@ -73,7 +78,7 @@ def train_model_for_ticker(ticker):
         # Set the experiment name. If it doesn't exist, MLflow creates it.
         mlflow.set_experiment("Baseline XGBoost Training")
         
-        with mlflow.start_run(run_name=f"xgboost_{ticker}"):
+        with mlflow.start_run(run_name=f"extended_features_{ticker}"):
             print(f"Starting MLflow run for {ticker.upper()}")
             
             # 1. Log parameters
