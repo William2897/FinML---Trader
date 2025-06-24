@@ -6,6 +6,7 @@ import xgboost as xgb
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from tqdm import tqdm
+import traceback # <--- 1. IMPORT THIS MODULE
 
 # --- Database Connection (Same as ingestion script) ---
 DB_USER = os.getenv('DB_USER', 'user')
@@ -18,27 +19,28 @@ engine = create_engine(db_url)
 
 TICKERS = ['aapl', 'googl', 'msft', 'tsla'] # Use lowercase tickers as per our table names
 
+# ... (feature_engineering and create_target_variable functions remain the same) ...
 def feature_engineering(df):
     """Creates an EXTENDED set of time-series features from the price data."""
     df['date'] = pd.to_datetime(df['date'])
     df.set_index('date', inplace=True)
-    
+
     # --- NEW: Longer-term Moving Averages ---
     df['ma_5'] = df['close'].rolling(window=5).mean()
     df['ma_10'] = df['close'].rolling(window=10).mean() # New
     df['ma_20'] = df['close'].rolling(window=20).mean()
     df['ma_50'] = df['close'].rolling(window=50).mean() # New
-    
+
     # --- NEW: Price Rate of Change ---
     df['roc_10'] = ((df['close'] - df['close'].shift(10)) / df['close'].shift(10)) * 100 # New
-    
+
     # Volatility
     df['volatility'] = df['close'].rolling(window=20).std()
-    
+
     # --- NEW: More Lag features ---
     for i in range(1, 11): # Extended from 5 to 10
         df[f'lag_{i}'] = df['close'].shift(i)
-        
+
     df.dropna(inplace=True)
     return df
 
@@ -46,10 +48,11 @@ def create_target_variable(df):
     """Creates the binary target variable: 1 if next day's close is higher, else 0."""
     df['price_change'] = df['close'].diff()
     df['target'] = (df['price_change'].shift(-1) > 0).astype(int)
-    
+
     # We drop the last row because it will have a NaN target
     df.dropna(inplace=True)
     return df
+
 
 def train_model_for_ticker(ticker):
     """Loads, processes, trains, evaluates, and LOGS a model for a single ticker."""
@@ -57,8 +60,10 @@ def train_model_for_ticker(ticker):
     
     table_name = f"price_data_{ticker}"
     
+    # --- 2. MODIFY THE 'except' BLOCK AT THE END OF THIS FUNCTION ---
     try:
-        df = pd.read_sql(f"SELECT * FROM {table_name}", engine)
+        with engine.connect() as connection:
+            df = pd.read_sql(f"SELECT * FROM {table_name}", connection)
         df = feature_engineering(df.copy())
         df = create_target_variable(df.copy())
         
@@ -74,14 +79,11 @@ def train_model_for_ticker(ticker):
         X_train, X_test = X[:train_size], X[train_size:]
         y_train, y_test = y[:train_size], y[train_size:]
 
-        # ### START OF MLFLOW INTEGRATION ###
-        # Set the experiment name. If it doesn't exist, MLflow creates it.
         mlflow.set_experiment("Baseline XGBoost Training")
         
         with mlflow.start_run(run_name=f"extended_features_{ticker}"):
             print(f"Starting MLflow run for {ticker.upper()}")
             
-            # 1. Log parameters
             params = {
                 'n_estimators': 100,
                 'learning_rate': 0.1,
@@ -92,7 +94,6 @@ def train_model_for_ticker(ticker):
             }
             mlflow.log_params(params)
             
-            # Train the model (code is the same)
             model = xgb.XGBClassifier(
                 objective='binary:logistic',
                 eval_metric='logloss',
@@ -103,10 +104,8 @@ def train_model_for_ticker(ticker):
             )
             model.fit(X_train, y_train)
             
-            # Make predictions
             y_pred = model.predict(X_test)
             
-            # 2. Log metrics
             accuracy = accuracy_score(y_test, y_pred)
             report = classification_report(y_test, y_pred, output_dict=True)
             
@@ -115,13 +114,17 @@ def train_model_for_ticker(ticker):
             mlflow.log_metric("recall_class_1", report['1']['recall'])
             mlflow.log_metric("f1_score_class_1", report['1']['f1-score'])
 
-            # 3. Log the model itself as an artifact
             mlflow.xgboost.log_model(model, artifact_path=f"model_{ticker}")
             
             print(f"Successfully logged run for {ticker.upper()} to MLflow.")
 
     except Exception as e:
         print(f"An error occurred while processing {ticker}: {e}")
+        # THIS IS THE MODIFIED PART:
+        print("--- FULL TRACEBACK ---")
+        traceback.print_exc()
+        print("----------------------")
+
 
 if __name__ == "__main__":
     for ticker in tqdm(TICKERS, desc="Training models for all tickers"):

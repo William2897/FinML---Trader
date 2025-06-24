@@ -13,6 +13,7 @@ RUN useradd -ms /bin/bash -d ${AIRFLOW_HOME} airflow
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     build-essential \
+    curl \
     && apt-get autoremove -yqq --purge \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

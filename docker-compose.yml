@@ -1,8 +1,11 @@
 # This defines common settings for all airflow services
+# This defines common settings for all airflow services
 x-airflow-common: &airflow-common
   build: .
   depends_on:
     postgres:
+      condition: service_healthy
+    mlflow_ui:
       condition: service_healthy
   environment:
     - AIRFLOW__CORE__EXECUTOR=LocalExecutor
@@ -32,6 +35,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres_init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 5s
@@ -39,13 +43,18 @@ services:
       retries: 5
 
   mlflow_ui:
-    build: .
-    container_name: finml_mlflow_ui
-    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri /opt/airflow/mlruns --default-artifact-root /opt/airflow/mlruns
-    ports:
-      - "5000:5000"
-    volumes:
-      - mlflow_data:/opt/airflow/mlruns
+      build: .
+      container_name: finml_mlflow_ui
+      command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri /opt/airflow/mlruns --default-artifact-root /opt/airflow/mlruns
+      ports:
+        - "5000:5000"
+      volumes:
+        - mlflow_data:/opt/airflow/mlruns
+      healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:5000"]
+        interval: 10s
+        timeout: 10s
+        retries: 5
 
   # Single Airflow standalone service - runs everything in one container
   airflow-standalone:
@@ -54,6 +63,8 @@ services:
     command: airflow standalone
     ports:
       - "8080:8080"
+    volumes:
+      - mlflow_data:/opt/airflow/mlruns
 
 volumes:
   postgres_data:
