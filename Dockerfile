@@ -1,10 +1,15 @@
 # Use a slim, official Python image
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 # Set an environment variable for where Airflow will live
 ENV AIRFLOW_HOME=/opt/airflow
 # Add the path for pip-installed executables to the system's PATH. Standard location for system-wide pip installs.
 ENV PATH="/usr/local/bin:${PATH}"
+
+# Define Airflow and Python versions as arguments to keep the build clean
+ARG AIRFLOW_VERSION=2.9.2
+ARG PYTHON_VERSION=3.11
+ENV AIRFLOW_VERSION=${AIRFLOW_VERSION}
 
 # Create a non-root user and its home directory FIRST
 RUN useradd -ms /bin/bash -d ${AIRFLOW_HOME} airflow
@@ -21,7 +26,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set the working directory
 WORKDIR ${AIRFLOW_HOME}
 
-# Copy requirements and install them system-wide
+# --- THE FIX (v2): Install Airflow using the CORRECT constraint file URL ---
+# The URL format is simpler for recent Airflow versions.
+# This single command installs Airflow, its providers (postgres, docker),
+# and all core dependencies like SQLAlchemy, pinned to versions tested by the Airflow team.
+RUN pip install --no-cache-dir \
+    "apache-airflow[postgres,docker]==${AIRFLOW_VERSION}" \
+    --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+
+# Copy and install the rest of the project requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

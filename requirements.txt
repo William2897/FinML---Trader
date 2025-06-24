@@ -1,3 +1,4 @@
+# Project-specific dependencies
 beautifulsoup4==4.13.4
 certifi==2025.6.15
 cffi==1.17.1
@@ -12,7 +13,6 @@ pandas==2.3.0
 peewee==3.18.1
 platformdirs==4.3.8
 protobuf==5.29.5
-psycopg2-binary==2.9.10
 pycparser==2.22
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
@@ -20,8 +20,6 @@ pytz==2025.2
 requests==2.32.4
 six==1.17.0
 soupsieve==2.7
-# Using SQLAlchemy 2.x for pandas compatibility
-SQLAlchemy==2.0.35
 typing_extensions==4.13.0
 tzdata==2025.2
 urllib3==2.5.0
@@ -31,6 +29,12 @@ scikit-learn==1.7.0
 xgboost==3.0.2
 tqdm==4.67.1
 mlflow==3.1.0
-# FINAL FIX: Use a stable version of Airflow compatible with SQLAlchemy 2.x
-apache-airflow[docker]==3.0.2
-asyncpg==0.28.0
+
+# NOTE: The following dependencies are now installed directly
+# in the Dockerfile using an Airflow constraint file to ensure
+# compatibility with SQLAlchemy 2.x:
+# - apache-airflow
+# - apache-airflow-providers-*
+# - SQLAlchemy
+# - psycopg2-binary
+# - asyncpg
