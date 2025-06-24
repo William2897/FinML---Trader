@@ -1,4 +1,5 @@
 import pandas as pd
+import mlflow
 from sqlalchemy import create_engine
 import os
 import xgboost as xgb
@@ -46,64 +47,74 @@ def create_target_variable(df):
     return df
 
 def train_model_for_ticker(ticker):
-    """Loads, processes, trains, and evaluates a model for a single ticker."""
+    """Loads, processes, trains, evaluates, and LOGS a model for a single ticker."""
     print(f"\n--- Processing Ticker: {ticker.upper()} ---")
     
     table_name = f"price_data_{ticker}"
     
     try:
-        # 1. Load Data
-        print(f"Loading data from table: {table_name}")
         df = pd.read_sql(f"SELECT * FROM {table_name}", engine)
-        
-        # 2. Feature Engineering
-        print("Engineering features...")
         df = feature_engineering(df.copy())
-        
-        # 3. Create Target Variable
-        print("Creating target variable...")
         df = create_target_variable(df.copy())
         
         if df.empty:
             print(f"Not enough data for {ticker} after processing. Skipping.")
             return
 
-        # 4. Define Features (X) and Target (y)
         features = [col for col in df.columns if col not in ['open', 'high', 'low', 'close', 'volume', 'ticker', 'price_change', 'target']]
         X = df[features]
         y = df['target']
         
-        # 5. Split Data (Time-series split, not random!)
-        # We must not shuffle time-series data to avoid lookahead bias.
         train_size = int(len(X) * 0.8)
         X_train, X_test = X[:train_size], X[train_size:]
         y_train, y_test = y[:train_size], y[train_size:]
+
+        # ### START OF MLFLOW INTEGRATION ###
+        # Set the experiment name. If it doesn't exist, MLflow creates it.
+        mlflow.set_experiment("Baseline XGBoost Training")
         
-        print(f"Training on {len(X_train)} samples, testing on {len(X_test)} samples.")
-        
-        # 6. Train XGBoost Model
-        print("Training XGBoost model...")
-        model = xgb.XGBClassifier(
-            objective='binary:logistic',
-            eval_metric='logloss',
-            use_label_encoder=False,
-            n_estimators=100,
-            learning_rate=0.1,
-            max_depth=3
-        )
-        model.fit(X_train, y_train)
-        
-        # 7. Evaluate Model
-        print("Evaluating model...")
-        y_pred = model.predict(X_test)
-        
-        accuracy = accuracy_score(y_test, y_pred)
-        print(f"Accuracy for {ticker.upper()}: {accuracy:.4f}")
-        print("Classification Report:")
-        print(classification_report(y_test, y_pred))
-        print("Confusion Matrix:")
-        print(confusion_matrix(y_test, y_pred))
-        
+        with mlflow.start_run(run_name=f"xgboost_{ticker}"):
+            print(f"Starting MLflow run for {ticker.upper()}")
+            
+            # 1. Log parameters
+            params = {
+                'n_estimators': 100,
+                'learning_rate': 0.1,
+                'max_depth': 3,
+                'train_size': len(X_train),
+                'test_size': len(X_test),
+                'ticker': ticker
+            }
+            mlflow.log_params(params)
+            
+            # Train the model (code is the same)
+            model = xgb.XGBClassifier(
+                objective='binary:logistic',
+                eval_metric='logloss',
+                use_label_encoder=False,
+                n_estimators=params['n_estimators'],
+                learning_rate=params['learning_rate'],
+                max_depth=params['max_depth']
+            )
+            model.fit(X_train, y_train)
+            
+            # Make predictions
+            y_pred = model.predict(X_test)
+            
+            # 2. Log metrics
+            accuracy = accuracy_score(y_test, y_pred)
+            report = classification_report(y_test, y_pred, output_dict=True)
+            
+            mlflow.log_metric("accuracy", accuracy)
+            mlflow.log_metric("precision_class_1", report['1']['precision'])
+            mlflow.log_metric("recall_class_1", report['1']['recall'])
+            mlflow.log_metric("f1_score_class_1", report['1']['f1-score'])
+
+            # 3. Log the model itself as an artifact
+            mlflow.xgboost.log_model(model, artifact_path=f"model_{ticker}")
+            
+            print(f"Successfully logged run for {ticker.upper()} to MLflow.")
+
     except Exception as e:
         print(f"An error occurred while processing {ticker}: {e}")
 

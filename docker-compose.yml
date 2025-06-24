@@ -1,8 +1,7 @@
 services:
-  # This service runs the data ingestion script
   ingestion_script:
     build: .
-    command: python scripts/data_ingestion.py # Explicit command
+    command: python scripts/data_ingestion.py
     depends_on:
       - postgres
     environment:
@@ -12,20 +11,33 @@ services:
       - DB_PASSWORD=password
       - DB_PORT=5432
 
-  # NEW: This service runs the model training script
   model_trainer:
     build: .
-    command: python scripts/train_baseline_model.py # Command for this service
+    command: python scripts/train_baseline_model.py
     depends_on:
       - postgres
+    volumes:
+      # Mount the shared volume so this container can write to it
+      - mlflow_data:/app/mlruns
     environment:
       - DB_HOST=postgres
       - DB_NAME=finml_data
       - DB_USER=user
       - DB_PASSWORD=password
       - DB_PORT=5432
+      # NEW: Tell the script where to log MLflow runs
+      - MLFLOW_TRACKING_URI=/app/mlruns
 
-  # The database service remains the same
+  # NEW SERVICE for the MLflow Web UI
+  mlflow_ui:
+    build: .
+    command: mlflow ui --host 0.0.0.0 --port 5000 --backend-store-uri /mlruns
+    ports:
+      - "5000:5000" # Expose the UI on port 5000
+    volumes:
+      # Mount the shared volume so the UI can read the experiments
+      - mlflow_data:/mlruns
+
   postgres:
     image: postgres:13
     environment:
@@ -39,3 +51,4 @@ services:
 
 volumes:
   postgres_data:
+  mlflow_data: # Define the new shared volume
